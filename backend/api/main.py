@@ -121,33 +121,72 @@ def on_status_message(client, userdata, msg):
     except Exception as error:
         print("Status message error:", error)
 
+def on_status_connect(client, userdata, flags, reason_code, properties):
+    print("======================================")
+    print("MQTT STATUS LISTENER CONNECTED")
+    print("Reason code:", reason_code)
+
+    result, mid = client.subscribe(
+        MQTT_STATUS_TOPIC,
+        qos=1
+    )
+
+    if result == mqtt.MQTT_ERR_SUCCESS:
+        print("Subscribed to:", MQTT_STATUS_TOPIC)
+    else:
+        print("MQTT SUBSCRIBE FAILED:", result)
+
+    print("======================================")
+
+
+def on_status_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+    print("======================================")
+    print("MQTT STATUS LISTENER DISCONNECTED")
+    print("Reason code:", reason_code)
+    print("======================================")
+
+
+def on_status_subscribe(client, userdata, mid, reason_codes, properties):
+    print("MQTT STATUS SUBSCRIPTION CONFIRMED")
+    print("MID:", mid)
+    print("Reason codes:", reason_codes)
+
+
 def start_status_listener():
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+
     client.username_pw_set(
         MQTT_USERNAME,
         MQTT_PASSWORD
     )
+
     client.tls_set()
+
+    client.on_connect = on_status_connect
+    client.on_disconnect = on_status_disconnect
+    client.on_subscribe = on_status_subscribe
     client.on_message = on_status_message
 
-    try:
-        client.connect(
-            MQTT_BROKER,
-            MQTT_PORT,
-            60
-        )
+    while True:
+        try:
+            print("\nConnecting MQTT status listener...")
 
-        client.subscribe(
-            MQTT_STATUS_TOPIC,
-            qos=1
-        )
+            client.connect(
+                MQTT_BROKER,
+                MQTT_PORT,
+                60
+            )
 
-        print("MQTT status listener connected")
-        print("Subscribed to:", MQTT_STATUS_TOPIC)
-        client.loop_forever()
+            print("MQTT status listener connected")
 
-    except Exception as error:
-        print("MQTT status listener error:", error)
+            client.loop_forever()
+
+        except Exception as error:
+            print("MQTT status listener error:", error)
+
+            print("Retrying MQTT status listener in 5 seconds...")
+
+            time.sleep(5)
 
 def get_db_connection():
     return psycopg2.connect(
