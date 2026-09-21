@@ -1,0 +1,56 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: iot-postgres
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+  mqtt-service:
+    build: ./backend/mqtt-service
+    container_name: iot-mqtt-service
+
+    depends_on:
+      - postgres
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - ./data:/app/data
+
+
+  api:
+    build: ./backend/api
+    container_name: iot-api
+
+    depends_on:
+      - postgres
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "8000:8000"
+
+
+volumes:
+  postgres_data:

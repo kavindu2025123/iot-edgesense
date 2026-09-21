@@ -1,0 +1,28 @@
+# Environment variables
+.env
+# Hardware credentials
+hardware/config.h
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / React
+node_modules/
+dashboard/node_modules/
+dashboard/dist/
+
+# Data
+*.csv
+
+# IDE / OS
+.vscode/
+.idea/
+*.log
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
