@@ -24,10 +24,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-MQTT_BROKER = "342859a9470f4f0ab1d678f5c21fab9d.s1.eu.hivemq.cloud"
-MQTT_PORT = 8883
-MQTT_USERNAME = "NRF_ESP32"
-MQTT_PASSWORD = "20020501"
+MQTT_BROKER = os.getenv("MQTT_BROKER")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 MQTT_COMMAND_TOPIC = "home/sensors/node1/command"
 MQTT_STATUS_TOPIC = "home/sensors/node1/status"
 
