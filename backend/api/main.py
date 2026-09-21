@@ -237,34 +237,26 @@ def get_latest_sensor():
 
 
 @app.get("/api/sensors/history")
-def get_sensor_history(limit: int = 100, hours: int = 1):
+def get_sensor_history(hours: int = 1):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     if hours > 0:
         cursor.execute("""
             SELECT node, packet, light, temperature, humidity, timestamp
-            FROM (
-                SELECT node, packet, light, temperature, humidity, timestamp, id
-                FROM sensor_readings
-                WHERE timestamp >= NOW() - (%s * INTERVAL '1 hour')
-                ORDER BY id DESC
-                LIMIT %s
-            ) AS recent
-            ORDER BY id ASC
-        """, (hours, limit))
+            FROM sensor_readings
+            WHERE timestamp >= (
+                NOW() AT TIME ZONE 'Asia/Colombo'
+            ) - (%s * INTERVAL '1 hour')
+            ORDER BY timestamp ASC
+        """, (hours,))
 
     else:
         cursor.execute("""
             SELECT node, packet, light, temperature, humidity, timestamp
-            FROM (
-                SELECT node, packet, light, temperature, humidity, timestamp, id
-                FROM sensor_readings
-                ORDER BY id DESC
-                LIMIT %s
-            ) AS recent
-            ORDER BY id ASC
-        """, (limit,))
+            FROM sensor_readings
+            ORDER BY timestamp ASC
+        """)
 
     rows = cursor.fetchall()
 

@@ -10,6 +10,56 @@ import {
 } from "recharts";
 import "./App.css";
 
+// Reduce a large dataset to a manageable number of points for chart display
+function downsampleData(data, maxPoints = 200) {
+  if (data.length <= maxPoints) {
+    return data;
+  }
+
+  const bucketSize = data.length / maxPoints;
+  const result = [];
+
+  for (let i = 0; i < maxPoints; i++) {
+    const start = Math.floor(i * bucketSize);
+    const end = Math.floor((i + 1) * bucketSize);
+
+    const bucket = data.slice(start, end);
+
+    if (bucket.length === 0) {
+      continue;
+    }
+
+    const avgTemperature =
+      bucket.reduce(
+        (sum, item) => sum + Number(item.temperature || 0),
+        0
+      ) / bucket.length;
+
+    const avgHumidity =
+      bucket.reduce(
+        (sum, item) => sum + Number(item.humidity || 0),
+        0
+      ) / bucket.length;
+
+    const avgLight =
+      bucket.reduce(
+        (sum, item) => sum + Number(item.light || 0),
+        0
+      ) / bucket.length;
+
+    const middleItem = bucket[Math.floor(bucket.length / 2)];
+
+    result.push({
+      ...middleItem,
+      temperature: Number(avgTemperature.toFixed(2)),
+      humidity: Number(avgHumidity.toFixed(2)),
+      light: Math.round(avgLight),
+    });
+  }
+
+  return result;
+}
+
 function App() {
   const [sensorData, setSensorData] = useState(null);
   const [historyData, setHistoryData] = useState([]);
@@ -108,7 +158,7 @@ function App() {
 
         // Get recent history
         const historyResponse = await fetch(
-          `http://localhost:8000/api/sensors/history?limit=500&hours=${timeRange}`
+          `http://localhost:8000/api/sensors/history?hours=${timeRange}`
         );
         if (!historyResponse.ok) {
           throw new Error("Failed to fetch sensor history");
@@ -116,9 +166,12 @@ function App() {
         const history = await historyResponse.json();
         const formattedData = history.map((item) => ({
           ...item,
-          time: new Date(item.timestamp).toLocaleTimeString(),
+          timestampMs: new Date(item.timestamp).getTime(),
         }));
-        setHistoryData(formattedData);
+
+        const chartData = downsampleData(formattedData, 200);
+        setHistoryData(chartData);
+
       } catch (error) {
         console.error(error);
         setError("Unable to connect to FastAPI");
@@ -140,6 +193,26 @@ function App() {
       clearInterval(interval);
     };
   }, [timeRange]);
+    // Calculate a readable temperature Y-axis range
+  const temperatureValues = historyData
+    .map((item) => Number(item.temperature))
+    .filter((value) => Number.isFinite(value));
+
+  let temperatureMin = 20;
+  let temperatureMax = 35;
+
+  if (temperatureValues.length > 0) {
+    const dataMin = Math.min(...temperatureValues);
+    const dataMax = Math.max(...temperatureValues);
+
+    const dataRange = dataMax - dataMin;
+
+    // Always keep at least 2°C padding
+    const padding = Math.max(2, dataRange * 0.25);
+
+    temperatureMin = Math.floor(dataMin - padding);
+    temperatureMax = Math.ceil(dataMax + padding);
+  }
 
   return (
     <div className="dashboard">
@@ -338,31 +411,105 @@ function App() {
           </div>
 
           {/* Temperature Chart */}
+          {/* Temperature Chart */}
           <div className="chart-card">
             <div className="chart-header">
-              <h2>Temperature History</h2>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(Number(e.target.value))}
-              >
-                <option value={1}>Last 1 Hour</option>
-                <option value={6}>Last 6 Hours</option>
-                <option value={24}>Last 24 Hours</option>
-                <option value={0}>All Data</option>
-              </select>
+              <div>
+                <h2>Temperature History</h2>
+                <p className="chart-subtitle">
+                  Temperature readings over time
+                </p>
+              </div>
+
+              <div className="time-range-buttons">
+                <button
+                  className={timeRange === 1 ? "active" : ""}
+                  onClick={() => setTimeRange(1)}
+                >
+                  1H
+                </button>
+
+                <button
+                  className={timeRange === 6 ? "active" : ""}
+                  onClick={() => setTimeRange(6)}
+                >
+                  6H
+                </button>
+
+                <button
+                  className={timeRange === 24 ? "active" : ""}
+                  onClick={() => setTimeRange(24)}
+                >
+                  24H
+                </button>
+
+                <button
+                  className={timeRange === 0 ? "active" : ""}
+                  onClick={() => setTimeRange(0)}
+                >
+                  All
+                </button>
+              </div>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={historyData}>
+
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart
+                data={historyData}
+                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
+
+                <XAxis
+                    type="number"
+                    dataKey="timestampMs"
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fontSize: 12 }}
+                    minTickGap={50}
+                    tickFormatter={(value) =>
+                      new Date(value).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    }
+                  />
+
+                <YAxis
+                  domain={[temperatureMin, temperatureMax]}
+                  tick={{ fontSize: 12 }}
+                  tickCount={7}
+                />
+
+                <Tooltip
+                    labelFormatter={(value) =>
+                      new Date(value).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    }
+                    formatter={(value, name) => {
+                      const units = {
+                        temperature: "°C",
+                        humidity: "%",
+                        light: "",
+                      };
+
+                      return [
+                        `${value}${units[name] || ""}`,
+                        name.charAt(0).toUpperCase() + name.slice(1),
+                      ];
+                    }}
+                  />
+
                 <Line
                   type="monotone"
                   dataKey="temperature"
                   stroke="#ff7300"
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
+                  activeDot={{ r: 5 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -371,12 +518,37 @@ function App() {
           {/* Humidity Chart */}
           <div className="chart-card">
             <h2>Humidity History</h2>
+            <p className="chart-subtitle humidity-subtitle">
+                  Humidity sensor readings over time
+            </p>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={historyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
+                <XAxis
+                    type="number"
+                    dataKey="timestampMs"
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fontSize: 12 }}
+                    minTickGap={50}
+                    tickFormatter={(value) =>
+                      new Date(value).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    }
+                  />
                 <YAxis />
-                <Tooltip />
+                <Tooltip
+                    labelFormatter={(value) =>
+                      new Date(value).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    }
+                  />
                 <Line
                   type="monotone"
                   dataKey="humidity"
@@ -390,19 +562,68 @@ function App() {
 
           {/* Light Chart */}
           <div className="chart-card">
-            <h2>Light Level History</h2>
+            <div className="chart-header">
+              <div>
+                <h2>Light Level History</h2>
+                <p className="chart-subtitle">
+                  Light sensor readings over time
+                </p>
+              </div>
+            </div>
+
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={historyData}>
+              <LineChart
+                data={historyData}
+                margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
+
+                <XAxis
+                  type="number"
+                  dataKey="timestampMs"
+                  domain={["dataMin", "dataMax"]}
+                  tick={{ fontSize: 12 }}
+                  minTickGap={50}
+                  tickFormatter={(value) =>
+                    new Date(value).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  }
+                />
+
+                <YAxis
+                  type="number"
+                  tick={{ fontSize: 12 }}
+                  width={60}
+                  domain={["auto", "auto"]}
+                  tickCount={6}
+                  tickFormatter={(value) => Math.round(value)}
+                />
+
+                <Tooltip
+                  labelFormatter={(value) =>
+                    new Date(value).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })
+                  }
+                  formatter={(value) => [
+                    `${Math.round(value)} ADC`,
+                    "Light Level",
+                  ]}
+                />
+
                 <Line
                   type="monotone"
                   dataKey="light"
                   stroke="#82ca9d"
                   strokeWidth={2}
                   dot={false}
+                  activeDot={{ r: 5 }}
                 />
               </LineChart>
             </ResponsiveContainer>
